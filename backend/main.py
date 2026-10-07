@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 load_dotenv(Path(__file__).with_name(".env"))
 
 logger = logging.getLogger(__name__)
-MODEL = "openai/gpt-oss-120b"
+MODEL = "meta-llama/llama-prompt-guard-2-86m"
 T = TypeVar("T", bound=BaseModel)
 
 

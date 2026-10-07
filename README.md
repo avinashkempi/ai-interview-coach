@@ -26,7 +26,7 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Add your Groq API key to `backend/.env` as `GROQ_API_KEY`. Keep this key private; do not put it in `.env.example` or commit `.env`. The backend defaults to `openai/gpt-oss-120b`. If that model is not enabled for your Groq account, set `GROQ_MODEL` in `backend/.env` to a model ID available in your Groq Console, then restart the backend. A model access error returns an actionable message naming this setting.
+Add your Groq API key to `backend/.env` as `GROQ_API_KEY`. Keep this key private; do not put it in `.env.example` or commit `.env`. The backend defaults to `meta-llama/llama-prompt-guard-2-86m`. If that model is not enabled for your Groq account, set `GROQ_MODEL` in `backend/.env` to a model ID available in your Groq Console, then restart the backend. A model access error returns an actionable message naming this setting.
 
 Start the backend from the `backend` folder:
 
@@ -95,7 +95,7 @@ Create a **Web Service** from this GitHub repository:
 Render supplies the listening `PORT`; `backend/start.sh` binds Uvicorn to `0.0.0.0` and that port. Add these environment variables in the Render service settings:
 
 - `GROQ_API_KEY`: your Groq API key (secret)
-- `GROQ_MODEL`: `openai/gpt-oss-120b` (optional; this is the default)
+- `GROQ_MODEL`: `meta-llama/llama-prompt-guard-2-86m` (optional; this is the default)
 - `FRONTEND_ORIGINS`: your deployed Vercel origin, for example `https://ai-interview-coach.vercel.app` (no path). Add multiple origins separated by commas if needed.
 
 After the first backend deploy, verify `https://<your-render-service>.onrender.com/health`.

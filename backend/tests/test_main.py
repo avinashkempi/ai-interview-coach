@@ -53,7 +53,7 @@ class InterviewApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["ended"], True)
         call = groq_client.chat.completions.create.await_args
-        self.assertEqual(call.kwargs["model"], "openai/gpt-oss-120b")
+        self.assertEqual(call.kwargs["model"], "meta-llama/llama-prompt-guard-2-86m")
         self.assertEqual(call.kwargs["response_format"], {"type": "json_object"})
 
     def test_start_interview_returns_first_question(self) -> None:
