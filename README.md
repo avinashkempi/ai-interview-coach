@@ -1,11 +1,11 @@
 # AI Interview Coach
 
-The project contains a Next.js frontend and a FastAPI backend. Choose a topic, role, difficulty, and coaching options to start an AI-powered technical interview. The backend provides Groq-powered interview turns, per-answer coaching, hints, structured reports, and revision cards.
+The project contains a Next.js frontend and a FastAPI backend. Choose a topic, role, difficulty, and coaching options to start an AI-powered interview. The backend provides Groq-powered interview turns, per-answer coaching, hints, structured reports, and revision cards.
 
 ## Practice features
 
 - Explore topic examples by category, preview a sample question, or try a daily challenge.
-- Choose a target role and follow its four-topic practice roadmap.
+- Choose a suggested target role or enter any role of your choice, then follow its four-topic practice roadmap.
 - Set a 5, 10, or 15 minute target, interviewer style, and adaptive difficulty.
 - Request a small hint during a session and get coaching notes plus a model answer after each response.
 - Use browser speech synthesis to hear questions and browser speech recognition to dictate answers when supported. Text input remains available in every browser.

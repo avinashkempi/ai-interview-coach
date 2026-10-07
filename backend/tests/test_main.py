@@ -105,6 +105,26 @@ class InterviewApiTests(unittest.TestCase):
         self.assertEqual(payload["settings"]["persona"], "Direct")
         self.assertEqual(payload["settings"]["resume_context"], "Built a React dashboard.")
 
+    def test_start_accepts_a_custom_target_role(self) -> None:
+        groq_client = self.groq_client_with_response(
+            {"message": "How would you prioritize a product roadmap?", "ended": False}
+        )
+        with patch("main.get_groq_client", return_value=groq_client):
+            response = self.client.post(
+                "/interview/start",
+                json={
+                    "topic": "Roadmap prioritization",
+                    "difficulty": "Medium",
+                    "settings": {"role": "Product Manager"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(
+            groq_client.chat.completions.create.await_args.kwargs["messages"][1]["content"]
+        )
+        self.assertEqual(payload["settings"]["role"], "Product Manager")
+
     def test_quick_session_ends_after_three_candidate_answers(self) -> None:
         with patch("main.get_groq_client") as get_client:
             response = self.client.post(

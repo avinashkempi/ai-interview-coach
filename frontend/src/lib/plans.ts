@@ -107,6 +107,22 @@ export function getDailyChallenge(date: Date) {
   };
 }
 
-export function getRolePreset(role: string) {
-  return rolePresets.find((preset) => preset.role === role) ?? rolePresets[0];
+export function getRolePreset(role: string): RolePreset {
+  const preset = rolePresets.find((item) => item.role === role);
+  if (preset) return preset;
+
+  const customRole = role.trim();
+  return {
+    role: customRole || "Your target role",
+    category: "Custom",
+    topics: [
+      "Role-specific fundamentals",
+      "Problem solving",
+      "Communication",
+      "Scenario-based questions",
+    ],
+    sampleQuestion: customRole
+      ? `What skills are most important for a ${customRole}, and how would you demonstrate them?`
+      : "What skills are most important for your target role, and how would you demonstrate them?",
+  };
 }

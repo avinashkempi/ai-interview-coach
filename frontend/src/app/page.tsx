@@ -32,6 +32,7 @@ export default function Home() {
   const router = useRouter();
   const [topic, setTopic] = useState(rolePresets[0].topics[0]);
   const [role, setRole] = useState(rolePresets[0].role);
+  const [isCustomRole, setIsCustomRole] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("Medium");
   const [length, setLength] = useState<InterviewLength>("10 min");
   const [persona, setPersona] = useState<InterviewPersona>("Supportive");
@@ -47,7 +48,8 @@ export default function Home() {
   const matchingTopics = rolePreset.topics.filter((suggestion) =>
     !topic.trim() || suggestion.toLowerCase().includes(topic.trim().toLowerCase()),
   );
-  const sampleQuestion = topic.trim()
+  const sampleQuestion = topic.trim() &&
+    !(isCustomRole && topic.trim() === rolePreset.topics[0])
     ? rolePresets.find((preset) => preset.topics.includes(topic.trim()))?.sampleQuestion ??
       `Explain a core concept in ${topic.trim()} and describe when you would use it.`
     : rolePreset.sampleQuestion;
@@ -59,14 +61,17 @@ export default function Home() {
       const value: unknown = JSON.parse(pending);
       if (typeof value !== "object" || value === null) return;
       if ("role" in value && typeof value.role === "string") {
-        const matchingRole = rolePresets.find((preset) => preset.role === value.role);
-        if (matchingRole) {
-          window.setTimeout(() => setRole(matchingRole.role), 0);
-          window.setTimeout(() => setTopic(matchingRole.topics[0]), 0);
-        }
+        const pendingRole = value.role;
+        const matchingRole = rolePresets.find((preset) => preset.role === pendingRole);
+        window.setTimeout(() => {
+          setRole(pendingRole);
+          setIsCustomRole(!matchingRole);
+          if (matchingRole) setTopic(matchingRole.topics[0]);
+        }, 0);
       }
       if ("topic" in value && typeof value.topic === "string") {
-        window.setTimeout(() => setTopic(value.topic as string), 0);
+        const pendingTopic = value.topic;
+        window.setTimeout(() => setTopic(pendingTopic), 0);
       }
       window.sessionStorage.removeItem(pendingSetupStorageKey);
     } catch {
@@ -98,9 +103,14 @@ export default function Home() {
   async function startInterview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedTopic = topic.trim();
+    const trimmedRole = role.trim();
 
+    if (!trimmedRole) {
+      setError("Enter a target role to get started.");
+      return;
+    }
     if (!trimmedTopic) {
-      setError("Enter a technical topic to get started.");
+      setError("Enter an interview topic to get started.");
       return;
     }
 
@@ -124,7 +134,7 @@ export default function Home() {
           topic: trimmedTopic,
           difficulty,
           settings: {
-            role,
+            role: trimmedRole,
             length,
             persona,
             adaptive_difficulty: adaptiveDifficulty,
@@ -186,7 +196,7 @@ export default function Home() {
         conversation: [{ role: "interviewer", content: result.message }],
         ended: result.ended,
         settings: {
-          role,
+          role: trimmedRole,
           length,
           persona,
           adaptive_difficulty: adaptiveDifficulty,
@@ -255,13 +265,40 @@ export default function Home() {
             id="role"
             onChange={(event) => {
               const nextRole = event.target.value;
-              setRole(nextRole);
-              setTopic(getRolePreset(nextRole).topics[0]);
+              const customRoleSelected = nextRole === "__custom__";
+              setIsCustomRole(customRoleSelected);
+              if (customRoleSelected) {
+                setRole("");
+                setTopic(getRolePreset("").topics[0]);
+              } else {
+                setRole(nextRole);
+                setTopic(getRolePreset(nextRole).topics[0]);
+              }
+              if (error) setError("");
             }}
-            value={role}
+            value={isCustomRole ? "__custom__" : role}
           >
             {rolePresets.map((preset) => <option key={preset.role}>{preset.role}</option>)}
+            <option value="__custom__">Other — enter a role</option>
           </select>
+          {isCustomRole && (
+            <>
+              <label className="field-label" htmlFor="custom-role">Your target role</label>
+              <input
+                autoComplete="off"
+                className="setup-select"
+                id="custom-role"
+                maxLength={100}
+                onChange={(event) => {
+                  setRole(event.target.value);
+                  if (error) setError("");
+                }}
+                placeholder="e.g. Product Manager, UX Researcher"
+                type="text"
+                value={role}
+              />
+            </>
+          )}
 
           <label className="field-label" htmlFor="topic">
             Interview topic
