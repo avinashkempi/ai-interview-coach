@@ -13,10 +13,12 @@ import {
 import {
   apiBaseUrl,
   isInterviewSession,
+  parseInterviewSession,
   saveInterviewSession,
   sessionChangeEvent,
   sessionStorageKey,
   type ConversationMessage,
+  type InterviewFeedbackEntry,
   type InterviewSession,
 } from "@/lib/interview";
 
@@ -66,14 +68,64 @@ async function getServerError(response: Response, action: string) {
   return message;
 }
 
+type SpeechRecognitionResultLike = {
+  0: { transcript: string };
+  isFinal: boolean;
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognitionLike;
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+};
+
+function isInterviewFeedback(value: unknown): value is Omit<InterviewFeedbackEntry, "question" | "answer"> {
+  if (!value || typeof value !== "object") return false;
+  const feedback = value as Partial<InterviewFeedbackEntry>;
+  return (
+    Array.isArray(feedback.what_went_well) &&
+    feedback.what_went_well.every((item) => typeof item === "string") &&
+    Array.isArray(feedback.improve_next) &&
+    feedback.improve_next.every((item) => typeof item === "string") &&
+    typeof feedback.example_answer === "string"
+  );
+}
+
+function isHintResponse(value: unknown): value is { hint: string } {
+  return typeof value === "object" && value !== null && "hint" in value && typeof value.hint === "string";
+}
+
 export default function InterviewPage() {
   const router = useRouter();
   const saved = useSyncExternalStore(subscribeToSession, getSessionSnapshot, () => null);
   const [answer, setAnswer] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [error, setError] = useState("");
+  const [hint, setHint] = useState("");
+  const [isGettingHint, setIsGettingHint] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
+  const [isGettingFeedback, setIsGettingFeedback] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const lastSpokenMessageRef = useRef("");
   let session: InterviewSession | null = null;
   if (saved) {
     try {
@@ -83,6 +135,10 @@ export default function InterviewPage() {
       session = null;
     }
   }
+  const latestMessage = session?.conversation.at(-1);
+  const latestMessageContent = latestMessage?.content;
+  const latestMessageRole = latestMessage?.role;
+  const voiceEnabled = session?.settings?.voice_enabled ?? false;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -91,6 +147,140 @@ export default function InterviewPage() {
   useEffect(() => {
     if (session?.ended) router.replace("/report");
   }, [router, session?.ended]);
+
+  useEffect(() => {
+    if (!voiceEnabled || latestMessageRole !== "interviewer" || !latestMessageContent) return;
+    if (!("speechSynthesis" in window) || lastSpokenMessageRef.current === latestMessageContent) return;
+    lastSpokenMessageRef.current = latestMessageContent;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(latestMessageContent));
+    return () => window.speechSynthesis.cancel();
+  }, [latestMessageContent, latestMessageRole, voiceEnabled]);
+
+  useEffect(() => () => {
+    recognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
+  }, []);
+
+  async function requestFeedback(question: string, submittedAnswer: string, sessionId?: string) {
+    setFeedbackError("");
+    setIsGettingFeedback(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/interview/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: session?.topic, question, answer: submittedAnswer }),
+      });
+      if (!response.ok) {
+        setFeedbackError(await getServerError(response, "get answer feedback"));
+        return;
+      }
+      const result: unknown = await response.json();
+      if (!isInterviewFeedback(result)) {
+        setFeedbackError("The server returned unexpected answer feedback.");
+        return;
+      }
+      const latestSession = parseInterviewSession(window.sessionStorage.getItem(sessionStorageKey));
+      if (!latestSession || latestSession.id !== sessionId) return;
+      const entry: InterviewFeedbackEntry = {
+        question,
+        answer: submittedAnswer,
+        what_went_well: result.what_went_well,
+        improve_next: result.improve_next,
+        example_answer: result.example_answer,
+      };
+      saveInterviewSession({
+        ...latestSession,
+        feedback: [...(latestSession.feedback ?? []), entry],
+      });
+    } catch {
+      setFeedbackError("Could not reach the coaching service. Your interview answer was saved.");
+    } finally {
+      setIsGettingFeedback(false);
+    }
+  }
+
+  async function getHint() {
+    if (!session || isThinking || isGettingHint) return;
+    if (!apiBaseUrl) {
+      setFeedbackError(
+        "The backend URL is not configured. Set NEXT_PUBLIC_API_URL and restart the frontend.",
+      );
+      return;
+    }
+    const question = [...session.conversation].reverse().find((message) => message.role === "interviewer");
+    if (!question) return;
+    setHint("");
+    setFeedbackError("");
+    setIsGettingHint(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/interview/hint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: session.topic,
+          question: question.content,
+          answer: answer.trim(),
+        }),
+      });
+      if (!response.ok) {
+        setFeedbackError(await getServerError(response, "get a hint"));
+        return;
+      }
+      const result: unknown = await response.json();
+      if (!isHintResponse(result) || !result.hint.trim()) {
+        setFeedbackError("The server returned an unexpected hint.");
+        return;
+      }
+      setHint(result.hint);
+    } catch {
+      setFeedbackError("Could not reach the coaching service. Please try again.");
+    } finally {
+      setIsGettingHint(false);
+    }
+  }
+
+  function toggleDictation() {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const speechWindow = window as SpeechWindow;
+    const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceError("Voice typing is not available in this browser. You can still type your answer.");
+      return;
+    }
+    setVoiceError("");
+    const recognition = new Recognition();
+    recognition.lang = window.navigator.language || "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      const finalTranscripts: string[] = [];
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        if (result.isFinal && result[0].transcript.trim()) {
+          finalTranscripts.push(result[0].transcript.trim());
+        }
+      }
+      const transcript = finalTranscripts.join(" ");
+      if (transcript) setAnswer((current) => [current.trim(), transcript].filter(Boolean).join(" "));
+    };
+    recognition.onerror = () => {
+      setVoiceError("Microphone access failed. Check your browser permission and try again.");
+      setIsListening(false);
+    };
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch {
+      setVoiceError("Could not start voice typing. You can still type your answer.");
+    }
+  }
 
   async function submitAnswer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -139,6 +329,7 @@ export default function InterviewPage() {
         body: JSON.stringify({
           topic: session.topic,
           difficulty: session.difficulty,
+          settings: session.settings,
           conversation: conversationWithAnswer,
         }),
       });
@@ -200,6 +391,13 @@ export default function InterviewPage() {
       return;
     }
 
+    setHint("");
+    if (previousSession.settings?.feedback_enabled !== false) {
+      const question = previousSession.conversation.at(-1);
+      if (question?.role === "interviewer") {
+        await requestFeedback(question.content, submittedAnswer, previousSession.id);
+      }
+    }
     setIsThinking(false);
     if (result.ended) router.replace("/report");
   }
@@ -245,8 +443,12 @@ export default function InterviewPage() {
           <div>
             <span className="eyebrow"><span className="status-dot" /> INTERVIEW IN PROGRESS</span>
             <h1>{session.topic}</h1>
+            <p className="chat-role-line">{session.settings?.role ?? "Software Engineer"} <span>·</span> {session.settings?.persona ?? "Supportive"} interviewer</p>
           </div>
-          <span className="session-tag difficulty-tag">{session.difficulty}</span>
+          <div className="chat-session-tags">
+            <span className="session-tag difficulty-tag">{session.difficulty}{session.settings?.adaptive_difficulty ? " · adaptive" : ""}</span>
+            {session.settings?.length && <span className="session-tag">{session.settings.length}</span>}
+          </div>
         </div>
 
         <div className="chat-messages" aria-live="polite">
@@ -267,8 +469,30 @@ export default function InterviewPage() {
               {message.role === "candidate" && (
                 <span className="candidate-avatar" aria-hidden="true">YOU</span>
               )}
+              {message.role === "candidate" && session.feedback?.find(
+                (item) => item.answer === message.content && session.conversation[index - 1]?.content === item.question,
+              ) && (
+                <div className="answer-feedback-card">
+                  <span className="card-kicker">COACH NOTES</span>
+                  <strong>What worked</strong>
+                  <ul>
+                    {session.feedback.find((item) => item.answer === message.content && session.conversation[index - 1]?.content === item.question)?.what_went_well.map((item, itemIndex) => <li key={`good-${itemIndex}`}>{item}</li>)}
+                  </ul>
+                  <strong>Try next</strong>
+                  <ul>
+                    {session.feedback.find((item) => item.answer === message.content && session.conversation[index - 1]?.content === item.question)?.improve_next.map((item, itemIndex) => <li key={`next-${itemIndex}`}>{item}</li>)}
+                  </ul>
+                  <details>
+                    <summary>See a stronger example</summary>
+                    <p>{session.feedback.find((item) => item.answer === message.content && session.conversation[index - 1]?.content === item.question)?.example_answer}</p>
+                  </details>
+                </div>
+              )}
             </article>
           ))}
+          {isGettingFeedback && (
+            <p className="feedback-loading" role="status">Coach is reviewing your last answer…</p>
+          )}
           {isThinking && (
             <div className="thinking-indicator" role="status" aria-live="polite">
               <span className="message-avatar" aria-hidden="true">AI</span>
@@ -292,6 +516,9 @@ export default function InterviewPage() {
             {error}
           </p>
         )}
+        {feedbackError && <p className="feedback-error" role="alert">{feedbackError}</p>}
+        {hint && <div className="hint-card"><span className="card-kicker">A SMALL NUDGE</span><p>{hint}</p></div>}
+        {voiceError && <p className="feedback-error" role="alert">{voiceError}</p>}
 
         <form className="answer-composer" onSubmit={submitAnswer}>
           <label className="sr-only" htmlFor="answer">Your answer</label>
@@ -310,14 +537,19 @@ export default function InterviewPage() {
           />
           <div className="composer-footer">
             <span>ENTER TO SEND <span className="key-divider">·</span> SHIFT + ENTER FOR A NEW LINE</span>
-            <button
-              className="send-button"
-              disabled={isThinking || !answer.trim()}
-              type="submit"
-            >
-              {isThinking ? "Thinking..." : "Send answer"}
-              <span aria-hidden="true">↗</span>
-            </button>
+            <div className="composer-actions">
+              <button className="composer-utility-button" disabled={isThinking || isGettingHint} onClick={() => void getHint()} type="button">
+                {isGettingHint ? "Finding a hint…" : "Need a hint?"}
+              </button>
+              {session.settings?.voice_enabled && (
+                <button aria-pressed={isListening} className={`composer-utility-button voice-button${isListening ? " active" : ""}`} onClick={toggleDictation} type="button">
+                  {isListening ? "Stop mic" : "Dictate"}
+                </button>
+              )}
+              <button className="send-button" disabled={isThinking || !answer.trim()} type="submit">
+                {isThinking ? "Thinking..." : "Send answer"} <span aria-hidden="true">↗</span>
+              </button>
+            </div>
           </div>
         </form>
       </section>

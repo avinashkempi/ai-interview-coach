@@ -1,9 +1,18 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { apiBaseUrl, saveInterviewSession, type Difficulty } from "@/lib/interview";
+import {
+  apiBaseUrl,
+  pendingSetupStorageKey,
+  saveInterviewSession,
+  type Difficulty,
+  type InterviewLength,
+  type InterviewPersona,
+  type InterviewSettings,
+} from "@/lib/interview";
+import { dailyChallenges, getDailyChallenge, getRolePreset, rolePresets, topicCategories } from "@/lib/plans";
 
 function isInterviewStartResponse(value: unknown): value is {
   message: string;
@@ -31,9 +40,85 @@ const difficulties: {
 export default function Home() {
   const router = useRouter();
   const [topic, setTopic] = useState("");
+  const [role, setRole] = useState(rolePresets[0].role);
+  const [category, setCategory] = useState("All");
   const [difficulty, setDifficulty] = useState<Difficulty>("Medium");
+  const [length, setLength] = useState<InterviewLength>("10 min");
+  const [persona, setPersona] = useState<InterviewPersona>("Supportive");
+  const [adaptiveDifficulty, setAdaptiveDifficulty] = useState(true);
+  const [feedbackEnabled, setFeedbackEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [resumeContext, setResumeContext] = useState("");
+  const [resumeError, setResumeError] = useState("");
+  const [isResumeExpanded, setIsResumeExpanded] = useState(false);
   const [error, setError] = useState("");
   const [isStarting, setIsStarting] = useState(false);
+  const [dailyChallenge, setDailyChallenge] = useState({
+    ...dailyChallenges[0],
+    dateKey: "TODAY",
+  });
+  const rolePreset = getRolePreset(role);
+  const allTopics = useMemo(
+    () => Array.from(new Set([...rolePresets.flatMap((preset) => preset.topics), ...topicCategories.flatMap((item) => item.topics)])),
+    [],
+  );
+  const categoryTopics = category === "All"
+    ? allTopics
+    : topicCategories.find((item) => item.name === category)?.topics ?? [];
+  const matchingTopics = categoryTopics.filter((suggestion) =>
+    !topic.trim() || suggestion.toLowerCase().includes(topic.trim().toLowerCase()),
+  ).slice(0, 10);
+  const sampleQuestion = topic.trim()
+    ? rolePresets.find((preset) => preset.topics.includes(topic.trim()))?.sampleQuestion ??
+      `Explain a core concept in ${topic.trim()} and describe when you would use it.`
+    : rolePreset.sampleQuestion;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDailyChallenge(getDailyChallenge(new Date())), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const pending = window.sessionStorage.getItem(pendingSetupStorageKey);
+      if (!pending) return;
+      const value: unknown = JSON.parse(pending);
+      if (typeof value !== "object" || value === null) return;
+      if ("role" in value && typeof value.role === "string") {
+        const matchingRole = rolePresets.find((preset) => preset.role === value.role);
+        if (matchingRole) {
+          window.setTimeout(() => setRole(matchingRole.role), 0);
+        }
+      }
+      if ("topic" in value && typeof value.topic === "string") {
+        window.setTimeout(() => setTopic(value.topic as string), 0);
+      }
+      window.sessionStorage.removeItem(pendingSetupStorageKey);
+    } catch {
+      window.sessionStorage.removeItem(pendingSetupStorageKey);
+    }
+  }, []);
+
+  async function readResumeFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!/\.(txt|md)$/i.test(file.name)) {
+      setResumeError("Choose a plain-text .txt or .md resume file.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 12_000) {
+      setResumeError("Resume text must be 12 KB or smaller.");
+      event.target.value = "";
+      return;
+    }
+    try {
+      setResumeContext((await file.text()).slice(0, 12_000));
+      setResumeError("");
+    } catch {
+      setResumeError("Could not read that file. Paste your resume text instead.");
+    }
+  }
 
   async function startInterview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,7 +145,20 @@ export default function Home() {
       response = await fetch(`${apiBaseUrl}/interview/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: trimmedTopic, difficulty }),
+        body: JSON.stringify({
+          topic: trimmedTopic,
+          difficulty,
+          settings: {
+            role,
+            length,
+            persona,
+            adaptive_difficulty: adaptiveDifficulty,
+            feedback_enabled: feedbackEnabled,
+            voice_enabled: voiceEnabled,
+            resume_context: resumeContext.trim(),
+            plan_topics: rolePreset.topics,
+          } satisfies InterviewSettings,
+        }),
       });
     } catch {
       setError(
@@ -107,10 +205,21 @@ export default function Home() {
 
     try {
       saveInterviewSession({
+        id: crypto.randomUUID(),
         topic: trimmedTopic,
         difficulty,
         conversation: [{ role: "interviewer", content: result.message }],
         ended: result.ended,
+        settings: {
+          role,
+          length,
+          persona,
+          adaptive_difficulty: adaptiveDifficulty,
+          feedback_enabled: feedbackEnabled,
+          voice_enabled: voiceEnabled,
+          resume_context: resumeContext.trim(),
+          plan_topics: rolePreset.topics,
+        },
       });
       router.push("/interview");
     } catch {
@@ -130,10 +239,10 @@ export default function Home() {
           </span>
           <span>INTERVIEW<span className="brand-accent">/</span>COACH</span>
         </Link>
-        <span className="topbar-note">
-          <span className="status-dot" />
-          YOUR NEXT ROLE STARTS HERE
-        </span>
+        <nav className="topbar-actions" aria-label="Main navigation">
+          <Link className="dashboard-link" href="/dashboard">Your progress <span aria-hidden="true">↗</span></Link>
+          <span className="topbar-note"><span className="status-dot" /> YOUR NEXT ROLE STARTS HERE</span>
+        </nav>
       </header>
 
       <section className="hero" aria-labelledby="page-title">
@@ -148,7 +257,7 @@ export default function Home() {
             <span>Coach</span>
           </h1>
           <p className="tagline">
-            Practice technical interviews. Build confidence one answer at a time.
+            Practice for the role you want. Get sharper with every answer.
           </p>
 
           <div className="hero-footnote">
@@ -166,21 +275,116 @@ export default function Home() {
             <span className="step-indicator">01 <span>/ 01</span></span>
           </div>
 
+          <label className="field-label" htmlFor="role">Choose your target role</label>
+          <select
+            className="setup-select"
+            id="role"
+            onChange={(event) => {
+              const nextRole = event.target.value;
+              setRole(nextRole);
+              setTopic(getRolePreset(nextRole).topics[0]);
+            }}
+            value={role}
+          >
+            {rolePresets.map((preset) => <option key={preset.role}>{preset.role}</option>)}
+          </select>
+          <div className="role-plan-note">
+            <span aria-hidden="true">✦</span>
+            <span><strong>4-session {rolePreset.role} plan</strong> · {rolePreset.topics.join(" → ")}</span>
+          </div>
+
+          <section className="daily-challenge" aria-label="Daily challenge">
+            <div className="daily-challenge-copy">
+              <span className="card-kicker">TODAY&apos;S CHALLENGE <span>· {dailyChallenge.dateKey}</span></span>
+              <strong>{dailyChallenge.prompt}</strong>
+            </div>
+            <button className="challenge-button" onClick={() => setTopic(dailyChallenge.topic)} type="button">
+              Try it <span aria-hidden="true">↗</span>
+            </button>
+          </section>
+
           <label className="field-label" htmlFor="topic">
             Technical topic
           </label>
-          <input
-            autoComplete="off"
-            className="topic-input"
-            id="topic"
-            maxLength={200}
-            onChange={(event) => {
-              setTopic(event.target.value);
-              if (error) setError("");
-            }}
-            placeholder="e.g. System design, React, databases"
-            value={topic}
-          />
+          <div className="topic-search">
+            <span className="search-icon" aria-hidden="true" />
+            <input
+              autoComplete="off"
+              className="topic-input"
+              id="topic"
+              maxLength={200}
+              onChange={(event) => {
+                setTopic(event.target.value);
+                if (error) setError("");
+              }}
+              placeholder="Search a topic or enter your own"
+              type="search"
+              value={topic}
+            />
+          </div>
+
+          <div className="topic-explorer" aria-label="Topic explorer">
+            <div className="category-tabs" role="group" aria-label="Filter topics by category">
+              {["All", ...topicCategories.map((item) => item.name)].map((name) => (
+                <button
+                  aria-pressed={category === name}
+                  className={`category-tab${category === name ? " active" : ""}`}
+                  key={name}
+                  onClick={() => {
+                    setCategory(name);
+                    if (name !== "All") {
+                      const topicsInCategory = topicCategories.find((item) => item.name === name)?.topics ?? [];
+                      if (!topicsInCategory.some((item) =>
+                        item.toLowerCase().includes(topic.trim().toLowerCase()),
+                      )) {
+                        setTopic("");
+                      }
+                    }
+                  }}
+                  type="button"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="topic-picker" aria-label="Suggested interview topics">
+            <div className="topic-picker-heading">
+              <span>{topic.trim() ? "MATCHING TOPICS" : "QUICK START"}</span>
+              <span className="topic-picker-hint">
+                {topic.trim() ? `${matchingTopics.length} found` : `${category} topics`}
+              </span>
+            </div>
+            {matchingTopics.length > 0 ? (
+              <div className="topic-suggestions">
+                {matchingTopics.map((suggestion) => (
+                  <button
+                    aria-pressed={topic.trim().toLowerCase() === suggestion.toLowerCase()}
+                    className={`topic-suggestion${topic.trim().toLowerCase() === suggestion.toLowerCase() ? " active" : ""}`}
+                    key={suggestion}
+                    onClick={() => {
+                      setTopic(suggestion);
+                      if (error) setError("");
+                    }}
+                    type="button"
+                  >
+                    {suggestion}
+                    <span aria-hidden="true">↗</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="topic-picker-empty">
+                No quick pick matches. Press Start interview to practice{" "}
+                <strong>{topic.trim()}</strong>.
+              </p>
+            )}
+          </div>
+
+          <details className="sample-question">
+            <summary><span>Preview a sample question</span><span aria-hidden="true">＋</span></summary>
+            <p>{sampleQuestion}</p>
+          </details>
 
           <fieldset className="difficulty-fieldset">
             <legend className="field-label">Choose your difficulty</legend>
@@ -207,6 +411,81 @@ export default function Home() {
               ))}
             </div>
           </fieldset>
+
+          <div className="setup-extra-grid">
+            <label className="field-label" htmlFor="length">
+              Session length
+              <select
+                className="setup-select"
+                id="length"
+                onChange={(event) => setLength(event.target.value as InterviewLength)}
+                value={length}
+              >
+                <option>5 min</option>
+                <option>10 min</option>
+                <option>15 min</option>
+              </select>
+            </label>
+            <label className="field-label" htmlFor="persona">
+              Interviewer style
+              <select
+                className="setup-select"
+                id="persona"
+                onChange={(event) => setPersona(event.target.value as InterviewPersona)}
+                value={persona}
+              >
+                <option>Supportive</option>
+                <option>Direct</option>
+                <option>Challenging</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="feature-toggles">
+            <label className="feature-toggle">
+              <input checked={adaptiveDifficulty} onChange={(event) => setAdaptiveDifficulty(event.target.checked)} type="checkbox" />
+              <span><strong>Adaptive difficulty</strong><small>Questions respond to how you&apos;re doing</small></span>
+            </label>
+            <label className="feature-toggle">
+              <input checked={feedbackEnabled} onChange={(event) => setFeedbackEnabled(event.target.checked)} type="checkbox" />
+              <span><strong>Coach me after each answer</strong><small>See actionable feedback and a model answer</small></span>
+            </label>
+            <label className="feature-toggle">
+              <input checked={voiceEnabled} onChange={(event) => setVoiceEnabled(event.target.checked)} type="checkbox" />
+              <span><strong>Voice mode</strong><small>Read questions aloud; dictate answers when supported</small></span>
+            </label>
+          </div>
+
+          <section className="resume-panel">
+            <button
+              aria-expanded={isResumeExpanded}
+              className="resume-toggle"
+              onClick={() => setIsResumeExpanded(!isResumeExpanded)}
+              type="button"
+            >
+              <span><strong>Tailor to my experience</strong><small>Optional · add resume text for role-specific questions</small></span>
+              <span aria-hidden="true">{isResumeExpanded ? "−" : "+"}</span>
+            </button>
+            {isResumeExpanded && (
+              <div className="resume-content">
+                <label className="field-label" htmlFor="resume-context">Resume or experience notes</label>
+                <textarea
+                  id="resume-context"
+                  maxLength={12000}
+                  onChange={(event) => setResumeContext(event.target.value)}
+                  placeholder="Paste relevant experience, projects, and skills here..."
+                  rows={4}
+                  value={resumeContext}
+                />
+                <label className="resume-file-label">
+                  Or upload a text resume
+                  <input accept=".txt,.md,text/plain,text/markdown" onChange={readResumeFile} type="file" />
+                </label>
+                <p className="privacy-note">Resume text is sent with this interview&apos;s AI requests and kept in this browser&apos;s active session only—not in progress history. Clear it here when finished.</p>
+                {resumeError && <p className="form-error" role="alert">{resumeError}</p>}
+              </div>
+            )}
+          </section>
 
           {error && (
             <p className="form-error" role="alert">

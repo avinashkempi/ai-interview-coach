@@ -7,6 +7,7 @@ import {
   isInterviewReport,
   parseInterviewSession,
   reportStorageKey,
+  saveInterviewProgress,
   sessionChangeEvent,
   sessionStorageKey,
   type InterviewReport,
@@ -53,6 +54,12 @@ export default function ReportPage() {
   const [report, setReport] = useState<InterviewReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [flashcards, setFlashcards] = useState<{ question: string; answer: string }[]>([]);
+  const [flashcardIndex, setFlashcardIndex] = useState(0);
+  const [showFlashcardAnswer, setShowFlashcardAnswer] = useState(false);
+  const [flashcardLoading, setFlashcardLoading] = useState(false);
+  const [flashcardError, setFlashcardError] = useState("");
+  const [progressSaveError, setProgressSaveError] = useState("");
   const attemptedSession = useRef<string | null>(null);
   const session = parseInterviewSession(saved);
 
@@ -74,6 +81,7 @@ export default function ReportPage() {
         body: JSON.stringify({
           topic: interview.topic,
           difficulty: interview.difficulty,
+          settings: interview.settings,
           conversation: interview.conversation,
         }),
       });
@@ -97,6 +105,11 @@ export default function ReportPage() {
       }
 
       setReport(result);
+      try {
+        saveInterviewProgress(interview, result);
+      } catch {
+        setProgressSaveError("Your report is ready, but progress could not be saved in this browser.");
+      }
     } catch {
       setError(
         `Could not reach the interview server at ${apiBaseUrl}. Make sure the backend is running and try again.`,
@@ -114,6 +127,63 @@ export default function ReportPage() {
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [generateReport, saved, session]);
+
+  async function generateFlashcards() {
+    if (!report || !session) return;
+    if (!apiBaseUrl) {
+      setFlashcardError(
+        "The backend URL is not configured. Set NEXT_PUBLIC_API_URL and redeploy the frontend.",
+      );
+      return;
+    }
+    setFlashcardLoading(true);
+    setFlashcardError("");
+    try {
+      const response = await fetch(`${apiBaseUrl}/revision-cards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: session.topic,
+          topics_to_revise: report.topics_to_revise,
+          weaknesses: report.weaknesses,
+        }),
+      });
+      if (!response.ok) {
+        setFlashcardError(await getErrorMessage(response));
+        return;
+      }
+      const value: unknown = await response.json();
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        !("cards" in value) ||
+        !Array.isArray(value.cards) ||
+        !value.cards.every((card) =>
+          typeof card === "object" &&
+          card !== null &&
+          "question" in card &&
+          typeof card.question === "string" &&
+          "answer" in card &&
+          typeof card.answer === "string",
+        )
+      ) {
+        setFlashcardError("The server returned unexpected revision cards.");
+        return;
+      }
+      setFlashcards(value.cards);
+      setFlashcardIndex(0);
+      setShowFlashcardAnswer(false);
+      if (value.cards.length === 0) {
+        setFlashcardError("No revision gaps were found to turn into flashcards.");
+      }
+    } catch {
+      setFlashcardError(
+        `Could not reach the interview server at ${apiBaseUrl}. Make sure the backend is running and try again.`,
+      );
+    } finally {
+      setFlashcardLoading(false);
+    }
+  }
 
   const retry = () => {
     if (!session) return;
@@ -158,7 +228,7 @@ export default function ReportPage() {
           </span>
           <span>INTERVIEW<span className="brand-accent">/</span>COACH</span>
         </Link>
-        <span className="report-session-label">{session.topic} <span>·</span> {session.difficulty}</span>
+        <span className="report-session-label">{session.settings?.role ?? session.topic} <span>·</span> {session.settings?.length ?? session.difficulty}</span>
       </header>
 
       <section className="report-content" aria-labelledby="report-title">
@@ -224,6 +294,47 @@ export default function ReportPage() {
               ) : (
                 <p>No specific revision topics were identified from this conversation.</p>
               )}
+              <button
+                className="revision-button"
+                disabled={flashcardLoading}
+                onClick={() => void generateFlashcards()}
+                type="button"
+              >
+                {flashcardLoading ? "Building your deck…" : flashcards.length ? "Refresh revision deck" : "Build revision flashcards"}
+                <span aria-hidden="true">✳</span>
+              </button>
+              {flashcardError && <p className="flashcard-error" role="alert">{flashcardError}</p>}
+              {flashcards.length > 0 && (
+                <div className="flashcard-deck">
+                  <div className="flashcard-count">CARD {String(flashcardIndex + 1).padStart(2, "0")} / {String(flashcards.length).padStart(2, "0")}</div>
+                  <button
+                    aria-label={showFlashcardAnswer ? "Hide answer" : "Reveal answer"}
+                    className={`revision-flashcard${showFlashcardAnswer ? " revealed" : ""}`}
+                    onClick={() => setShowFlashcardAnswer(!showFlashcardAnswer)}
+                    type="button"
+                  >
+                    <span className="card-kicker">{showFlashcardAnswer ? "ANSWER" : "QUICK RECALL"}</span>
+                    <strong>{showFlashcardAnswer ? flashcards[flashcardIndex].answer : flashcards[flashcardIndex].question}</strong>
+                    {!showFlashcardAnswer && <small>Click to reveal</small>}
+                  </button>
+                  <div className="flashcard-controls">
+                    <button
+                      disabled={flashcardIndex === 0}
+                      onClick={() => { setFlashcardIndex(flashcardIndex - 1); setShowFlashcardAnswer(false); }}
+                      type="button"
+                    >
+                      ← Previous
+                    </button>
+                    <button
+                      disabled={flashcardIndex >= flashcards.length - 1}
+                      onClick={() => { setFlashcardIndex(flashcardIndex + 1); setShowFlashcardAnswer(false); }}
+                      type="button"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="interviewer-verdict-card">
@@ -235,6 +346,8 @@ export default function ReportPage() {
             <Link className="start-button new-interview-button" href="/" onClick={startNewInterview}>
               Start New Interview <span className="button-arrow" aria-hidden="true">↗</span>
             </Link>
+            <Link className="dashboard-report-link" href="/dashboard">View your progress <span aria-hidden="true">↗</span></Link>
+            {progressSaveError && <p className="flashcard-error" role="alert">{progressSaveError}</p>}
           </>
         ) : (
           <div className="report-loading" role="status">

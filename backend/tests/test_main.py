@@ -74,6 +74,119 @@ class InterviewApiTests(unittest.TestCase):
         payload = json.loads(groq_client.chat.completions.create.await_args.kwargs["messages"][1]["content"])
         self.assertEqual(payload["conversation"], [])
 
+    def test_start_includes_interview_settings_in_provider_context(self) -> None:
+        groq_client = self.groq_client_with_response(
+            {"message": "How would you optimize a React list?", "ended": False}
+        )
+        with patch("main.get_groq_client", return_value=groq_client):
+            response = self.client.post(
+                "/interview/start",
+                json={
+                    "topic": "React",
+                    "difficulty": "Medium",
+                    "settings": {
+                        "role": "Frontend Engineer",
+                        "length": "5 min",
+                        "persona": "Direct",
+                        "adaptive_difficulty": False,
+                        "feedback_enabled": True,
+                        "voice_enabled": False,
+                        "resume_context": "Built a React dashboard.",
+                        "plan_topics": ["React", "Accessibility"],
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(
+            groq_client.chat.completions.create.await_args.kwargs["messages"][1]["content"]
+        )
+        self.assertEqual(payload["settings"]["role"], "Frontend Engineer")
+        self.assertEqual(payload["settings"]["persona"], "Direct")
+        self.assertEqual(payload["settings"]["resume_context"], "Built a React dashboard.")
+
+    def test_quick_session_ends_after_three_candidate_answers(self) -> None:
+        with patch("main.get_groq_client") as get_client:
+            response = self.client.post(
+                "/interview/answer",
+                json={
+                    "topic": "React",
+                    "difficulty": "Medium",
+                    "settings": {"length": "5 min"},
+                    "conversation": [
+                        {"role": "interviewer", "content": "Question one?"},
+                        {"role": "candidate", "content": "Answer one."},
+                        {"role": "interviewer", "content": "Question two?"},
+                        {"role": "candidate", "content": "Answer two."},
+                        {"role": "interviewer", "content": "Question three?"},
+                        {"role": "candidate", "content": "Answer three."},
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ended"])
+        get_client.assert_not_called()
+
+    def test_feedback_endpoint_returns_structured_coaching(self) -> None:
+        feedback = {
+            "what_went_well": ["You described why memoization helps."],
+            "improve_next": ["Mention its memory trade-off."],
+            "example_answer": "Memoization can avoid repeated work, but can increase memory use.",
+        }
+        groq_client = self.groq_client_with_response(feedback)
+        with patch("main.get_groq_client", return_value=groq_client):
+            response = self.client.post(
+                "/interview/feedback",
+                json={
+                    "topic": "React",
+                    "question": "When would you use memoization?",
+                    "answer": "To avoid recalculating an unchanged value.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), feedback)
+
+    def test_hint_endpoint_returns_a_nudge(self) -> None:
+        groq_client = self.groq_client_with_response(
+            {"hint": "Consider what should happen when the request is retried."}
+        )
+        with patch("main.get_groq_client", return_value=groq_client):
+            response = self.client.post(
+                "/interview/hint",
+                json={
+                    "topic": "APIs",
+                    "question": "How would you make a payment request safe to retry?",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("retried", response.json()["hint"])
+
+    def test_revision_cards_endpoint_returns_active_recall_cards(self) -> None:
+        cards = {
+            "cards": [
+                {
+                    "question": "What does an idempotency key prevent?",
+                    "answer": "It prevents a retried request from applying the same operation more than once.",
+                }
+            ]
+        }
+        groq_client = self.groq_client_with_response(cards)
+        with patch("main.get_groq_client", return_value=groq_client):
+            response = self.client.post(
+                "/revision-cards",
+                json={
+                    "topic": "APIs",
+                    "topics_to_revise": ["Idempotency"],
+                    "weaknesses": ["You omitted duplicate request handling."],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), cards)
+
     def test_submit_answer_returns_next_turn(self) -> None:
         groq_client = self.groq_client_with_response(
             {"message": "Thanks. How does yield differ from return?", "ended": False}

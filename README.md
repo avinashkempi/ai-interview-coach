@@ -1,6 +1,18 @@
 # AI Interview Coach
 
-The project contains a Next.js frontend and a FastAPI backend. The frontend lets you choose an interview topic and difficulty, then starts a session with the first AI-generated question. The backend provides Groq-powered interview turns and structured interview reports.
+The project contains a Next.js frontend and a FastAPI backend. Choose a topic, role, difficulty, and coaching options to start an AI-powered technical interview. The backend provides Groq-powered interview turns, per-answer coaching, hints, structured reports, and revision cards.
+
+## Practice features
+
+- Explore topic examples by category, preview a sample question, or try a daily challenge.
+- Choose a target role and follow its four-topic practice roadmap.
+- Set a 5, 10, or 15 minute target, interviewer style, and adaptive difficulty.
+- Request a small hint during a session and get coaching notes plus a model answer after each response.
+- Use browser speech synthesis to hear questions and browser speech recognition to dictate answers when supported. Text input remains available in every browser.
+- Paste a resume or upload a plain-text `.txt`/`.md` resume to tailor the interview. Resume content is sent with the interview's AI requests and kept in the active browser session; it is excluded from progress history.
+- Review completed scores in the progress dashboard and generate active-recall flashcards from report gaps.
+
+Completed-session progress is stored locally in the browser (up to 100 sessions). It is not synced across devices or sent to the backend. Browser voice features depend on browser support and microphone permission.
 
 ## Backend setup
 
@@ -42,9 +54,12 @@ Open `http://localhost:3000`.
 ## Backend API
 
 - `GET /health` returns `{"status":"ok"}`.
-- `POST /interview/start` accepts `topic` and `difficulty` (`Easy`, `Medium`, or `Hard`) and returns the first `message` plus an `ended` boolean.
-- `POST /interview/answer` accepts `topic`, `difficulty`, and the full `conversation` so far, including the candidate's latest answer as the final message. Each message has a `role` (`interviewer` or `candidate`) and `content`. The response returns the next interviewer `message` and `ended` boolean. When `ended` is `true`, no more answers should be submitted.
-- `POST /report` accepts `topic`, `difficulty`, and the complete `conversation`. It returns `score` (0-100), `performance_band`, evidence-based `strengths` and `weaknesses`, `topics_to_revise`, `overall_verdict`, and `result`. Bands are Excellent (85+), Good (70-84), Adequate (55-69), and Weak (below 55). Pass is 70 or above.
+- `POST /interview/start` accepts `topic`, `difficulty` (`Easy`, `Medium`, or `Hard`), and optional `settings` for role, length, interviewer persona, adaptive difficulty, and resume context. It returns the first `message` plus an `ended` boolean.
+- `POST /interview/answer` accepts `topic`, `difficulty`, optional `settings`, and the full `conversation` so far, including the candidate's latest answer as the final message. Each message has a `role` (`interviewer` or `candidate`) and `content`. The response returns the next interviewer `message` and `ended` boolean. When `ended` is `true`, no more answers should be submitted.
+- `POST /interview/feedback` accepts a topic, question, and answer; it returns coaching notes and a model answer.
+- `POST /interview/hint` accepts a topic, question, and optional partial answer; it returns a short nudge.
+- `POST /revision-cards` accepts a topic and report gaps; it returns active-recall question/answer cards.
+- `POST /report` accepts `topic`, `difficulty`, optional `settings`, and the complete `conversation`. It returns `score` (0-100), `performance_band`, evidence-based `strengths` and `weaknesses`, `topics_to_revise`, `overall_verdict`, and `result`. Bands are Excellent (85+), Good (70-84), Adequate (55-69), and Weak (below 55). Pass is 70 or above.
 
 No database or server-side interview state is used: the frontend retains and sends the conversation with each answer and report request. CORS permits HTTP(S) origins on `localhost` and `127.0.0.1` at any port, plus production origins configured in `FRONTEND_ORIGINS` as a comma-separated list.
 
