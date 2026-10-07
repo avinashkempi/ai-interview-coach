@@ -35,7 +35,7 @@ npm install
 npm run dev
 ```
 
-The frontend calls `http://localhost:8000` by default. To use a different backend URL, create `frontend/.env.local` (see [frontend/.env.example](./frontend/.env.example)) and set `NEXT_PUBLIC_API_URL`.
+The frontend requires `NEXT_PUBLIC_API_URL`. For local development, create `frontend/.env.local` from [frontend/.env.example](./frontend/.env.example); in Vercel, set it as a project environment variable before building.
 
 Open `http://localhost:3000`.
 
@@ -46,7 +46,7 @@ Open `http://localhost:3000`.
 - `POST /interview/answer` accepts `topic`, `difficulty`, and the full `conversation` so far, including the candidate's latest answer as the final message. Each message has a `role` (`interviewer` or `candidate`) and `content`. The response returns the next interviewer `message` and `ended` boolean. When `ended` is `true`, no more answers should be submitted.
 - `POST /report` accepts `topic`, `difficulty`, and the complete `conversation`. It returns `score` (0-100), `performance_band`, evidence-based `strengths` and `weaknesses`, `topics_to_revise`, `overall_verdict`, and `result`. Bands are Excellent (85+), Good (70-84), Adequate (55-69), and Weak (below 55). Pass is 70 or above.
 
-No database or server-side interview state is used: the frontend retains and sends the conversation with each answer and report request. CORS permits HTTP(S) origins on `localhost` and `127.0.0.1` at any port.
+No database or server-side interview state is used: the frontend retains and sends the conversation with each answer and report request. CORS permits HTTP(S) origins on `localhost` and `127.0.0.1` at any port, plus production origins configured in `FRONTEND_ORIGINS` as a comma-separated list.
 
 Example interview start:
 
@@ -65,3 +65,37 @@ curl -X POST http://localhost:8000/interview/answer \
 ```
 
 Set `GROQ_API_KEY` before starting the backend. If it is missing, AI endpoints respond with HTTP 503. Provider failures or invalid model output return HTTP 502; request validation errors return HTTP 422.
+
+## Deploying to Render and Vercel
+
+### Render backend
+
+Create a **Web Service** from this GitHub repository:
+
+- **Root Directory:** `backend`
+- **Runtime:** Python
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `./start.sh`
+
+Render supplies the listening `PORT`; `backend/start.sh` binds Uvicorn to `0.0.0.0` and that port. Add these environment variables in the Render service settings:
+
+- `GROQ_API_KEY`: your Groq API key (secret)
+- `GROQ_MODEL`: `openai/gpt-oss-120b` (optional; this is the default)
+- `FRONTEND_ORIGINS`: your deployed Vercel origin, for example `https://ai-interview-coach.vercel.app` (no path). Add multiple origins separated by commas if needed.
+
+After the first backend deploy, verify `https://<your-render-service>.onrender.com/health`.
+
+### Vercel frontend
+
+Import the same GitHub repository as a Vercel project:
+
+- **Root Directory:** `frontend`
+- **Framework Preset:** Next.js
+- **Build Command:** `npm run build`
+- **Install Command:** `npm install`
+
+Set this environment variable for Production (and Preview too if you want preview deployments to call the backend):
+
+- `NEXT_PUBLIC_API_URL`: `https://<your-render-service>.onrender.com` (no trailing slash)
+
+Deploy once to get the Vercel domain, then add that exact origin to Render’s `FRONTEND_ORIGINS` and redeploy/restart the backend. If you use a custom Vercel domain, add its `https://` origin too. Redeploy the frontend after changing `NEXT_PUBLIC_API_URL` because Next.js embeds `NEXT_PUBLIC_*` variables at build time.

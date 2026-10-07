@@ -33,8 +33,25 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="AI Interview Coach API", lifespan=lifespan)
 
+
+def get_frontend_origins(configured_origins: str | None = None) -> list[str]:
+    raw_origins = (
+        os.getenv("FRONTEND_ORIGINS", "")
+        if configured_origins is None
+        else configured_origins
+    )
+    return [
+        origin.strip().rstrip("/")
+        for origin in raw_origins.split(",")
+        if origin.strip()
+    ]
+
+
+frontend_origins = get_frontend_origins()
+
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=frontend_origins,
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],

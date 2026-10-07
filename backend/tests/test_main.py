@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from groq import GroqError, NotFoundError
 from httpx import Request, Response
 
-from main import app
+from main import app, get_frontend_origins
 
 
 class InterviewApiTests(unittest.TestCase):
@@ -332,6 +332,18 @@ class InterviewApiTests(unittest.TestCase):
         self.assertEqual(
             response.headers["access-control-allow-origin"],
             "http://localhost:3001",
+        )
+
+    def test_deployed_frontend_origins_are_normalized(self) -> None:
+        origins = get_frontend_origins(
+            " https://ai-interview-coach.vercel.app/ , https://coach.example.com "
+        )
+        self.assertEqual(
+            origins,
+            [
+                "https://ai-interview-coach.vercel.app",
+                "https://coach.example.com",
+            ],
         )
 
     def test_health_check_is_available(self) -> None:

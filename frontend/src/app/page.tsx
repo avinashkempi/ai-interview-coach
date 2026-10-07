@@ -47,6 +47,14 @@ export default function Home() {
     setError("");
     setIsStarting(true);
 
+    if (!apiBaseUrl) {
+      setError(
+        "The backend URL is not configured. Set NEXT_PUBLIC_API_URL and restart the frontend.",
+      );
+      setIsStarting(false);
+      return;
+    }
+
     let response: Response;
     try {
       response = await fetch(`${apiBaseUrl}/interview/start`, {

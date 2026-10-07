@@ -59,6 +59,14 @@ export default function ReportPage() {
   const generateReport = useCallback(async (interview: InterviewSession) => {
     setLoading(true);
     setError("");
+    if (!apiBaseUrl) {
+      setError(
+        "The backend URL is not configured. Set NEXT_PUBLIC_API_URL and redeploy the frontend.",
+      );
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(`${apiBaseUrl}/report`, {
         method: "POST",

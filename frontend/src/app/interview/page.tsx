@@ -113,6 +113,15 @@ export default function InterviewPage() {
     setAnswer("");
     setIsThinking(true);
 
+    if (!apiBaseUrl) {
+      setAnswer(submittedAnswer);
+      setIsThinking(false);
+      setError(
+        "The backend URL is not configured. Set NEXT_PUBLIC_API_URL and restart the frontend.",
+      );
+      return;
+    }
+
     try {
       saveInterviewSession({ ...session, conversation: conversationWithAnswer });
     } catch {

@@ -25,10 +25,7 @@ export type InterviewReport = {
 export const sessionStorageKey = "ai-interview-coach-session";
 export const reportStorageKey = "ai-interview-coach-report";
 export const sessionChangeEvent = "ai-interview-coach-session-change";
-export const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(
-  /\/$/,
-  "",
-);
+export const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, "") ?? "";
 
 export function isInterviewSession(value: unknown): value is InterviewSession {
   if (!value || typeof value !== "object") return false;
