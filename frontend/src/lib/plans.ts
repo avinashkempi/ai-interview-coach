@@ -42,6 +42,12 @@ export const rolePresets: RolePreset[] = [
     topics: ["System design", "Distributed systems", "Observability", "Databases"],
     sampleQuestion: "How would you investigate rising latency across a distributed service?",
   },
+  {
+    role: "SDET",
+    category: "Quality Engineering",
+    topics: ["Playwright", "Automation testing", "Test strategy", "API testing", "CI/CD"],
+    sampleQuestion: "How would you build a reliable Playwright test strategy for a flaky web app without slowing down release quality?",
+  },
 ];
 
 export const topicCategories = [
@@ -64,6 +70,10 @@ export const topicCategories = [
   {
     name: "Systems",
     topics: ["System design", "Distributed systems", "Networking", "Security"],
+  },
+  {
+    name: "Quality Engineering",
+    topics: ["Playwright", "Automation testing", "Test strategy", "API testing", "CI/CD"],
   },
 ];
 
