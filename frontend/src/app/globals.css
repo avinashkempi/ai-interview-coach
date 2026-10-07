@@ -285,16 +285,6 @@ input:focus-visible {
   letter-spacing: -0.045em;
 }
 
-.step-indicator {
-  padding-top: 4px;
-  color: #d0d1ca;
-  font-size: 10px;
-}
-
-.step-indicator span {
-  color: #696d65;
-}
-
 .field-label {
   display: block;
   margin-bottom: 10px;
@@ -358,22 +348,12 @@ input:focus-visible {
 }
 
 .topic-picker-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: block;
   margin-bottom: 9px;
   color: #aeb1a7;
   font-family: "DM Mono", monospace;
   font-size: 8px;
   letter-spacing: 0.07em;
-}
-
-.topic-picker-hint {
-  color: #696d65;
-  font-family: "DM Sans", "Segoe UI", sans-serif;
-  font-size: 9px;
-  letter-spacing: 0;
 }
 
 .topic-suggestions {
@@ -414,18 +394,6 @@ input:focus-visible {
   color: var(--accent);
 }
 
-.topic-picker-empty {
-  margin: 0;
-  color: #858980;
-  font-size: 10px;
-  line-height: 1.6;
-}
-
-.topic-picker-empty strong {
-  color: #d3d5cd;
-  font-weight: 600;
-}
-
 .setup-select {
   width: 100%;
   height: 42px;
@@ -436,103 +404,6 @@ input:focus-visible {
   background: #131513;
   color: #e5e6e0;
   font-size: 11px;
-}
-
-.role-plan-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 10px 0 21px;
-  color: #81857b;
-  font-size: 9px;
-  line-height: 1.6;
-}
-
-.role-plan-note > span:first-child {
-  color: var(--accent);
-}
-
-.role-plan-note strong {
-  color: #c8cbc1;
-  font-weight: 600;
-}
-
-.daily-challenge {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 13px;
-  margin: 0 0 23px;
-  padding: 13px 14px;
-  border: 1px solid rgb(211 250 117 / 20%);
-  border-radius: 6px;
-  background: linear-gradient(110deg, rgb(211 250 117 / 7%), rgb(211 250 117 / 2%));
-}
-
-.daily-challenge-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.daily-challenge-copy .card-kicker {
-  margin: 0;
-  font-size: 8px;
-}
-
-.daily-challenge-copy .card-kicker span {
-  color: #858980;
-  font-weight: 400;
-}
-
-.daily-challenge-copy strong {
-  color: #d5d7cf;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.55;
-}
-
-.challenge-button {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 9px;
-  border: 1px solid #505747;
-  border-radius: 4px;
-  background: #1d2118;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 9px;
-}
-
-.category-tabs {
-  display: flex;
-  gap: 6px;
-  margin: 14px 0 12px;
-  overflow-x: auto;
-  padding: 2px 0 5px;
-  scrollbar-width: thin;
-}
-
-.category-tab {
-  flex: 0 0 auto;
-  padding: 6px 9px;
-  border: 1px solid #343831;
-  border-radius: 4px;
-  background: transparent;
-  color: #888c83;
-  cursor: pointer;
-  font-size: 8px;
-  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
-}
-
-.category-tab:hover,
-.category-tab.active {
-  border-color: rgb(211 250 117 / 45%);
-  background: rgb(211 250 117 / 6%);
-  color: var(--accent);
 }
 
 .sample-question {
@@ -578,11 +449,63 @@ input:focus-visible {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 21px;
+  margin-top: 17px;
 }
 
 .setup-extra-grid .field-label {
   margin-bottom: 0;
+}
+
+.setup-card > .field-label {
+  margin-bottom: 8px;
+}
+
+.setup-card > .setup-select {
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+
+.optional-settings {
+  margin-top: 20px;
+  border-top: 1px solid #30332e;
+}
+
+.optional-settings > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+  color: #c9cbc4;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.optional-settings > summary::-webkit-details-marker {
+  display: none;
+}
+
+.optional-settings > summary::after {
+  margin-left: auto;
+  color: var(--accent);
+  content: "+";
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.optional-settings[open] > summary::after {
+  content: "−";
+}
+
+.optional-settings-hint {
+  color: #777b72;
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.optional-settings-content {
+  padding-bottom: 4px;
 }
 
 .feature-toggles {
@@ -705,108 +628,6 @@ input:focus-visible {
   margin-top: 8px;
   line-height: 1.6;
   text-align: left;
-}
-
-.difficulty-fieldset {
-  min-width: 0;
-  margin: 26px 0 0;
-  padding: 0;
-  border: 0;
-}
-
-.difficulty-fieldset legend {
-  padding: 0;
-}
-
-.difficulty-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 9px;
-}
-
-.difficulty-option {
-  display: flex;
-  min-height: 106px;
-  cursor: pointer;
-  flex-direction: column;
-  padding: 11px 11px 12px;
-  border: 1px solid #343731;
-  border-radius: 6px;
-  background: #151715;
-  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
-}
-
-.difficulty-option:hover {
-  transform: translateY(-1px);
-  border-color: #54594d;
-}
-
-.difficulty-option.selected {
-  border-color: rgb(211 250 117 / 75%);
-  background: linear-gradient(145deg, rgb(211 250 117 / 7%), #171917 80%);
-}
-
-.difficulty-option input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.difficulty-option:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
-
-.difficulty-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.difficulty-number {
-  color: #73776d;
-  font-family: "DM Mono", monospace;
-  font-size: 9px;
-}
-
-.selected .difficulty-number {
-  color: var(--accent);
-}
-
-.radio-indicator {
-  display: grid;
-  width: 12px;
-  height: 12px;
-  place-items: center;
-  border: 1px solid #53574f;
-  border-radius: 50%;
-}
-
-.selected .radio-indicator {
-  border-color: var(--accent);
-}
-
-.selected .radio-indicator::after {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  content: "";
-}
-
-.difficulty-name {
-  margin-top: 12px;
-  color: #e6e7e1;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.difficulty-description {
-  margin-top: 5px;
-  color: #777b72;
-  font-size: 9px;
-  line-height: 1.4;
 }
 
 .form-error {
@@ -2294,10 +2115,6 @@ input:focus-visible {
 
   .setup-card {
     padding: 25px 21px;
-  }
-
-  .daily-challenge {
-    align-items: flex-start;
   }
 
   .setup-extra-grid {

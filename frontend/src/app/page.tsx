@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -12,7 +12,7 @@ import {
   type InterviewPersona,
   type InterviewSettings,
 } from "@/lib/interview";
-import { dailyChallenges, getDailyChallenge, getRolePreset, rolePresets, topicCategories } from "@/lib/plans";
+import { getRolePreset, rolePresets } from "@/lib/plans";
 
 function isInterviewStartResponse(value: unknown): value is {
   message: string;
@@ -28,20 +28,10 @@ function isInterviewStartResponse(value: unknown): value is {
   );
 }
 
-const difficulties: {
-  value: Difficulty;
-  description: string;
-}[] = [
-  { value: "Easy", description: "Core concepts & recall" },
-  { value: "Medium", description: "Applied problem solving" },
-  { value: "Hard", description: "Trade-offs & system thinking" },
-];
-
 export default function Home() {
   const router = useRouter();
-  const [topic, setTopic] = useState("");
+  const [topic, setTopic] = useState(rolePresets[0].topics[0]);
   const [role, setRole] = useState(rolePresets[0].role);
-  const [category, setCategory] = useState("All");
   const [difficulty, setDifficulty] = useState<Difficulty>("Medium");
   const [length, setLength] = useState<InterviewLength>("10 min");
   const [persona, setPersona] = useState<InterviewPersona>("Supportive");
@@ -53,30 +43,14 @@ export default function Home() {
   const [isResumeExpanded, setIsResumeExpanded] = useState(false);
   const [error, setError] = useState("");
   const [isStarting, setIsStarting] = useState(false);
-  const [dailyChallenge, setDailyChallenge] = useState({
-    ...dailyChallenges[0],
-    dateKey: "TODAY",
-  });
   const rolePreset = getRolePreset(role);
-  const allTopics = useMemo(
-    () => Array.from(new Set([...rolePresets.flatMap((preset) => preset.topics), ...topicCategories.flatMap((item) => item.topics)])),
-    [],
-  );
-  const categoryTopics = category === "All"
-    ? allTopics
-    : topicCategories.find((item) => item.name === category)?.topics ?? [];
-  const matchingTopics = categoryTopics.filter((suggestion) =>
+  const matchingTopics = rolePreset.topics.filter((suggestion) =>
     !topic.trim() || suggestion.toLowerCase().includes(topic.trim().toLowerCase()),
-  ).slice(0, 10);
+  );
   const sampleQuestion = topic.trim()
     ? rolePresets.find((preset) => preset.topics.includes(topic.trim()))?.sampleQuestion ??
       `Explain a core concept in ${topic.trim()} and describe when you would use it.`
     : rolePreset.sampleQuestion;
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDailyChallenge(getDailyChallenge(new Date())), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     try {
@@ -88,6 +62,7 @@ export default function Home() {
         const matchingRole = rolePresets.find((preset) => preset.role === value.role);
         if (matchingRole) {
           window.setTimeout(() => setRole(matchingRole.role), 0);
+          window.setTimeout(() => setTopic(matchingRole.topics[0]), 0);
         }
       }
       if ("topic" in value && typeof value.topic === "string") {
@@ -270,12 +245,11 @@ export default function Home() {
           <div className="card-heading">
             <div>
               <p className="card-kicker">LET&apos;S GET STARTED</p>
-              <h2>Set up your session</h2>
+              <h2>Start practicing</h2>
             </div>
-            <span className="step-indicator">01 <span>/ 01</span></span>
           </div>
 
-          <label className="field-label" htmlFor="role">Choose your target role</label>
+          <label className="field-label" htmlFor="role">Target role</label>
           <select
             className="setup-select"
             id="role"
@@ -288,23 +262,9 @@ export default function Home() {
           >
             {rolePresets.map((preset) => <option key={preset.role}>{preset.role}</option>)}
           </select>
-          <div className="role-plan-note">
-            <span aria-hidden="true">✦</span>
-            <span><strong>4-session {rolePreset.role} plan</strong> · {rolePreset.topics.join(" → ")}</span>
-          </div>
-
-          <section className="daily-challenge" aria-label="Daily challenge">
-            <div className="daily-challenge-copy">
-              <span className="card-kicker">TODAY&apos;S CHALLENGE <span>· {dailyChallenge.dateKey}</span></span>
-              <strong>{dailyChallenge.prompt}</strong>
-            </div>
-            <button className="challenge-button" onClick={() => setTopic(dailyChallenge.topic)} type="button">
-              Try it <span aria-hidden="true">↗</span>
-            </button>
-          </section>
 
           <label className="field-label" htmlFor="topic">
-            Technical topic
+            Interview topic
           </label>
           <div className="topic-search">
             <span className="search-icon" aria-hidden="true" />
@@ -317,45 +277,16 @@ export default function Home() {
                 setTopic(event.target.value);
                 if (error) setError("");
               }}
-              placeholder="Search a topic or enter your own"
+              placeholder="e.g. React, system design, or your own topic"
               type="search"
               value={topic}
             />
           </div>
 
-          <div className="topic-explorer" aria-label="Topic explorer">
-            <div className="category-tabs" role="group" aria-label="Filter topics by category">
-              {["All", ...topicCategories.map((item) => item.name)].map((name) => (
-                <button
-                  aria-pressed={category === name}
-                  className={`category-tab${category === name ? " active" : ""}`}
-                  key={name}
-                  onClick={() => {
-                    setCategory(name);
-                    if (name !== "All") {
-                      const topicsInCategory = topicCategories.find((item) => item.name === name)?.topics ?? [];
-                      if (!topicsInCategory.some((item) =>
-                        item.toLowerCase().includes(topic.trim().toLowerCase()),
-                      )) {
-                        setTopic("");
-                      }
-                    }
-                  }}
-                  type="button"
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="topic-picker" aria-label="Suggested interview topics">
-            <div className="topic-picker-heading">
-              <span>{topic.trim() ? "MATCHING TOPICS" : "QUICK START"}</span>
-              <span className="topic-picker-hint">
-                {topic.trim() ? `${matchingTopics.length} found` : `${category} topics`}
-              </span>
-            </div>
-            {matchingTopics.length > 0 ? (
+          {matchingTopics.length > 0 &&
+            topic.trim().toLowerCase() !== rolePreset.topics[0].toLowerCase() && (
+            <div className="topic-picker" aria-label="Suggested topics for this role">
+              <span className="topic-picker-heading">SUGGESTED TOPICS</span>
               <div className="topic-suggestions">
                 {matchingTopics.map((suggestion) => (
                   <button
@@ -373,119 +304,110 @@ export default function Home() {
                   </button>
                 ))}
               </div>
-            ) : (
-              <p className="topic-picker-empty">
-                No quick pick matches. Press Start interview to practice{" "}
-                <strong>{topic.trim()}</strong>.
-              </p>
-            )}
-          </div>
-
-          <details className="sample-question">
-            <summary><span>Preview a sample question</span><span aria-hidden="true">＋</span></summary>
-            <p>{sampleQuestion}</p>
-          </details>
-
-          <fieldset className="difficulty-fieldset">
-            <legend className="field-label">Choose your difficulty</legend>
-            <div className="difficulty-options">
-              {difficulties.map((option, index) => (
-                <label
-                  className={`difficulty-option${difficulty === option.value ? " selected" : ""}`}
-                  key={option.value}
-                >
-                  <input
-                    checked={difficulty === option.value}
-                    name="difficulty"
-                    onChange={() => setDifficulty(option.value)}
-                    type="radio"
-                    value={option.value}
-                  />
-                  <span className="difficulty-topline">
-                    <span className="difficulty-number">0{index + 1}</span>
-                    <span className="radio-indicator" aria-hidden="true" />
-                  </span>
-                  <span className="difficulty-name">{option.value}</span>
-                  <span className="difficulty-description">{option.description}</span>
-                </label>
-              ))}
             </div>
-          </fieldset>
+          )}
 
-          <div className="setup-extra-grid">
-            <label className="field-label" htmlFor="length">
-              Session length
-              <select
-                className="setup-select"
-                id="length"
-                onChange={(event) => setLength(event.target.value as InterviewLength)}
-                value={length}
-              >
-                <option>5 min</option>
-                <option>10 min</option>
-                <option>15 min</option>
-              </select>
-            </label>
-            <label className="field-label" htmlFor="persona">
-              Interviewer style
-              <select
-                className="setup-select"
-                id="persona"
-                onChange={(event) => setPersona(event.target.value as InterviewPersona)}
-                value={persona}
-              >
-                <option>Supportive</option>
-                <option>Direct</option>
-                <option>Challenging</option>
-              </select>
-            </label>
-          </div>
+          <details className="optional-settings">
+            <summary>
+              <span>Customize your session</span>
+              <span className="optional-settings-hint">Optional</span>
+            </summary>
+            <div className="optional-settings-content">
+              <label className="field-label" htmlFor="difficulty">
+                Difficulty
+                <select
+                  className="setup-select"
+                  id="difficulty"
+                  onChange={(event) => setDifficulty(event.target.value as Difficulty)}
+                  value={difficulty}
+                >
+                  <option>Easy</option>
+                  <option>Medium</option>
+                  <option>Hard</option>
+                </select>
+              </label>
 
-          <div className="feature-toggles">
-            <label className="feature-toggle">
-              <input checked={adaptiveDifficulty} onChange={(event) => setAdaptiveDifficulty(event.target.checked)} type="checkbox" />
-              <span><strong>Adaptive difficulty</strong><small>Questions respond to how you&apos;re doing</small></span>
-            </label>
-            <label className="feature-toggle">
-              <input checked={feedbackEnabled} onChange={(event) => setFeedbackEnabled(event.target.checked)} type="checkbox" />
-              <span><strong>Coach me after each answer</strong><small>See actionable feedback and a model answer</small></span>
-            </label>
-            <label className="feature-toggle">
-              <input checked={voiceEnabled} onChange={(event) => setVoiceEnabled(event.target.checked)} type="checkbox" />
-              <span><strong>Voice mode</strong><small>Read questions aloud; dictate answers when supported</small></span>
-            </label>
-          </div>
-
-          <section className="resume-panel">
-            <button
-              aria-expanded={isResumeExpanded}
-              className="resume-toggle"
-              onClick={() => setIsResumeExpanded(!isResumeExpanded)}
-              type="button"
-            >
-              <span><strong>Tailor to my experience</strong><small>Optional · add resume text for role-specific questions</small></span>
-              <span aria-hidden="true">{isResumeExpanded ? "−" : "+"}</span>
-            </button>
-            {isResumeExpanded && (
-              <div className="resume-content">
-                <label className="field-label" htmlFor="resume-context">Resume or experience notes</label>
-                <textarea
-                  id="resume-context"
-                  maxLength={12000}
-                  onChange={(event) => setResumeContext(event.target.value)}
-                  placeholder="Paste relevant experience, projects, and skills here..."
-                  rows={4}
-                  value={resumeContext}
-                />
-                <label className="resume-file-label">
-                  Or upload a text resume
-                  <input accept=".txt,.md,text/plain,text/markdown" onChange={readResumeFile} type="file" />
+              <div className="setup-extra-grid">
+                <label className="field-label" htmlFor="length">
+                  Session length
+                  <select
+                    className="setup-select"
+                    id="length"
+                    onChange={(event) => setLength(event.target.value as InterviewLength)}
+                    value={length}
+                  >
+                    <option>5 min</option>
+                    <option>10 min</option>
+                    <option>15 min</option>
+                  </select>
                 </label>
-                <p className="privacy-note">Resume text is sent with this interview&apos;s AI requests and kept in this browser&apos;s active session only—not in progress history. Clear it here when finished.</p>
-                {resumeError && <p className="form-error" role="alert">{resumeError}</p>}
+                <label className="field-label" htmlFor="persona">
+                  Interviewer style
+                  <select
+                    className="setup-select"
+                    id="persona"
+                    onChange={(event) => setPersona(event.target.value as InterviewPersona)}
+                    value={persona}
+                  >
+                    <option>Supportive</option>
+                    <option>Direct</option>
+                    <option>Challenging</option>
+                  </select>
+                </label>
               </div>
-            )}
-          </section>
+
+              <div className="feature-toggles">
+                <label className="feature-toggle">
+                  <input checked={adaptiveDifficulty} onChange={(event) => setAdaptiveDifficulty(event.target.checked)} type="checkbox" />
+                  <span><strong>Adaptive difficulty</strong><small>Questions respond to how you&apos;re doing</small></span>
+                </label>
+                <label className="feature-toggle">
+                  <input checked={feedbackEnabled} onChange={(event) => setFeedbackEnabled(event.target.checked)} type="checkbox" />
+                  <span><strong>Coach me after each answer</strong><small>See actionable feedback and a model answer</small></span>
+                </label>
+                <label className="feature-toggle">
+                  <input checked={voiceEnabled} onChange={(event) => setVoiceEnabled(event.target.checked)} type="checkbox" />
+                  <span><strong>Voice mode</strong><small>Read questions aloud; dictate answers when supported</small></span>
+                </label>
+              </div>
+
+              <section className="resume-panel">
+                <button
+                  aria-expanded={isResumeExpanded}
+                  className="resume-toggle"
+                  onClick={() => setIsResumeExpanded(!isResumeExpanded)}
+                  type="button"
+                >
+                  <span><strong>Tailor to my experience</strong><small>Optional · add resume text for role-specific questions</small></span>
+                  <span aria-hidden="true">{isResumeExpanded ? "−" : "+"}</span>
+                </button>
+                {isResumeExpanded && (
+                  <div className="resume-content">
+                    <label className="field-label" htmlFor="resume-context">Resume or experience notes</label>
+                    <textarea
+                      id="resume-context"
+                      maxLength={12000}
+                      onChange={(event) => setResumeContext(event.target.value)}
+                      placeholder="Paste relevant experience, projects, and skills here..."
+                      rows={4}
+                      value={resumeContext}
+                    />
+                    <label className="resume-file-label">
+                      Or upload a text resume
+                      <input accept=".txt,.md,text/plain,text/markdown" onChange={readResumeFile} type="file" />
+                    </label>
+                    <p className="privacy-note">Resume text is sent with this interview&apos;s AI requests and kept in this browser&apos;s active session only—not in progress history. Clear it here when finished.</p>
+                    {resumeError && <p className="form-error" role="alert">{resumeError}</p>}
+                  </div>
+                )}
+              </section>
+
+              <details className="sample-question">
+                <summary><span>Preview a sample question</span><span aria-hidden="true">＋</span></summary>
+                <p>{sampleQuestion}</p>
+              </details>
+            </div>
+          </details>
 
           {error && (
             <p className="form-error" role="alert">
